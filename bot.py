@@ -1,5 +1,5 @@
 # bot.py
-import asyncio, os, re, time, html
+import asyncio, os, re, time, html, logging
 from contextlib import suppress
 from typing import Set, Tuple
 
@@ -11,6 +11,13 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode, ChatType
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message
+
+# ---------- Logging ----------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+log = logging.getLogger("bot")
 
 # ---------- Config ----------
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
@@ -169,21 +176,35 @@ async def healthz():
 
 @app.on_event("startup")
 async def on_startup():
-    # Start polling in the background; keep FastAPI running for /healthz
-    # Limit updates to what we use (reduces bandwidth & CPU)
+    # Make sure polling receives updates (remove prior webhook, drop pending)
+    await bot.delete_webhook(drop_pending_updates=True)
+    log.info("Webhook deleted (if any). Starting polling...")
+
+    # Limit updates to reduce CPU/bandwidth
     allowed = dp.resolve_used_update_types()
-    # Long-polling timeout keeps requests sparse & efficient
+    log.info("Allowed updates: %s", allowed)
+
+    # Start polling as background task
     global _bot_task
-    _bot_task = asyncio.create_task(dp.start_polling(bot, allowed_updates=allowed, polling_timeout=50))
+    _bot_task = asyncio.create_task(
+        dp.start_polling(
+            bot,
+            allowed_updates=allowed,
+            polling_timeout=50,  # long timeout -> fewer requests, stable on Render
+        )
+    )
+    log.info("Polling task started.")
 
 @app.on_event("shutdown")
 async def on_shutdown():
     global _bot_task
+    log.info("Shutting down...")
     if _bot_task:
         _bot_task.cancel()
         with suppress(asyncio.CancelledError):
             await _bot_task
+    log.info("Shutdown complete.")
 
 if __name__ == "__main__":
-    # Local: python bot.py
+    # Local run: python bot.py
     uvicorn.run("bot:app", host="0.0.0.0", port=PORT)
