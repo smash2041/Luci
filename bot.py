@@ -1,30 +1,28 @@
-from aiogram import Bot, Dispatcher, executor, types
+import asyncio
+import logging
+import os
+
+from flask import Flask
+from threading import Thread
+
+from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
+    Message,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     CallbackQuery
 )
 
-from flask import Flask
-from threading import Thread
-
-import os
-import logging
-
 # =========================
-# LOGGING
-# =========================
-
-logging.basicConfig(level=logging.INFO)
-
-# =========================
-# BOT CONFIG
+# CONFIG
 # =========================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+logging.basicConfig(level=logging.INFO)
+
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
 # =========================
 # FLASK KEEP ALIVE
@@ -34,17 +32,17 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Bot is running!"
+    return "Bot Running!"
 
-def run_web():
+def run():
     app.run(host="0.0.0.0", port=8080)
 
 def keep_alive():
-    t = Thread(target=run_web)
+    t = Thread(target=run)
     t.start()
 
 # =========================
-# PHOTO
+# IMAGE
 # =========================
 
 PHOTO_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
@@ -53,8 +51,8 @@ PHOTO_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
 # START COMMAND
 # =========================
 
-@dp.message_handler(commands=["start"])
-async def start_cmd(message: types.Message):
+@dp.message(F.text == "/start")
+async def start_cmd(message: Message):
 
     caption = """
 🔥 PREMIUM 18+ CONTENT 🔥
@@ -73,28 +71,32 @@ AT ------------>> ₹57/- 💋
 Instant Access Available For You 🌚
 """
 
-    keyboard = InlineKeyboardMarkup(row_width=2)
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="UNLOCK 💎",
+                    callback_data="unlock"
+                ),
 
-    keyboard.add(
-        InlineKeyboardButton(
-            text="UNLOCK 💎",
-            callback_data="unlock"
-        ),
+                InlineKeyboardButton(
+                    text="DEMO 😋",
+                    callback_data="demo"
+                )
+            ],
 
-        InlineKeyboardButton(
-            text="DEMO 😋",
-            callback_data="demo"
-        ),
+            [
+                InlineKeyboardButton(
+                    text="PROOF 😊",
+                    callback_data="proof"
+                ),
 
-        InlineKeyboardButton(
-            text="PROOF 😊",
-            callback_data="proof"
-        ),
-
-        InlineKeyboardButton(
-            text="SUPPORT ❤️",
-            callback_data="support"
-        )
+                InlineKeyboardButton(
+                    text="SUPPORT ❤️",
+                    callback_data="support"
+                )
+            ]
+        ]
     )
 
     await message.answer_photo(
@@ -104,21 +106,21 @@ Instant Access Available For You 🌚
     )
 
 # =========================
-# BUTTON FUNCTIONS
+# BUTTONS
 # =========================
 
-@dp.callback_query_handler(lambda c: c.data == "unlock")
-async def unlock_button(callback: CallbackQuery):
+@dp.callback_query(F.data == "unlock")
+async def unlock(callback: CallbackQuery):
 
     await callback.message.answer(
-        "💎 Payment system later yaha add kar sakte ho."
+        "💎 Payment system later add kar sakte ho."
     )
 
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data == "demo")
-async def demo_button(callback: CallbackQuery):
+@dp.callback_query(F.data == "demo")
+async def demo(callback: CallbackQuery):
 
     await callback.message.answer(
         "😋 Demo links/videos later yaha add karo."
@@ -127,18 +129,18 @@ async def demo_button(callback: CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data == "proof")
-async def proof_button(callback: CallbackQuery):
+@dp.callback_query(F.data == "proof")
+async def proof(callback: CallbackQuery):
 
     await callback.message.answer(
-        "😊 Payment proofs later yaha add karo."
+        "😊 Proofs later yaha add karo."
     )
 
     await callback.answer()
 
 
-@dp.callback_query_handler(lambda c: c.data == "support")
-async def support_button(callback: CallbackQuery):
+@dp.callback_query(F.data == "support")
+async def support(callback: CallbackQuery):
 
     await callback.message.answer(
         "❤️ Support username later yaha add karo."
@@ -147,13 +149,16 @@ async def support_button(callback: CallbackQuery):
     await callback.answer()
 
 # =========================
-# RUN BOT
+# MAIN
 # =========================
 
-if __name__ == "__main__":
+async def main():
 
     keep_alive()
 
-    print("Bot Running...")
+    print("Bot Started!")
 
-    executor.start_polling(dp, skip_updates=True)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
