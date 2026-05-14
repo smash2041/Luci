@@ -32,13 +32,21 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Bot Running!"
+    return "Bot Alive"
 
-def run():
-    app.run(host="0.0.0.0", port=8080)
+PORT = int(os.environ.get("PORT", 10000))
+
+def run_web():
+    app.run(
+        host="0.0.0.0",
+        port=PORT,
+        debug=False,
+        use_reloader=False
+    )
 
 def keep_alive():
-    t = Thread(target=run)
+    t = Thread(target=run_web)
+    t.daemon = True
     t.start()
 
 # =========================
@@ -55,7 +63,7 @@ PHOTO_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
 async def start_cmd(message: Message):
 
     caption = """
-🔥 PREMIUM 18+ CONTENT 🔥
+🔥 PREMIUM 18+ CONTENT 😘🔥
 
 1. Indian Desi Videos - 10000+
 2. Couple Videos - 5000+
@@ -156,7 +164,9 @@ async def main():
 
     keep_alive()
 
-    print("Bot Started!")
+    await bot.delete_webhook(drop_pending_updates=True)
+
+    print("Bot Started")
 
     await dp.start_polling(bot)
 
