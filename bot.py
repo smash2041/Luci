@@ -241,11 +241,16 @@ async def send_all(message: Message):
         await message.answer("❌ No Saved Posts")
         return
 
-    total_sent = 0
+    delivered_users = 0
 
-    for post in posts:
+    for user in users:
 
-        for user in users:
+        if user["user_id"] == OWNER_ID:
+            continue
+
+        success = False
+
+        for post in posts:
 
             try:
 
@@ -273,20 +278,24 @@ async def send_all(message: Message):
                         caption=post["caption"]
                     )
 
-                total_sent += 1
+                success = True
 
             except:
                 pass
 
-        supabase.table(
-            "post_queue"
-        ).delete().eq(
-            "id",
-            post["id"]
-        ).execute()
+        if success:
+            delivered_users += 1
+
+    # DELETE POSTS AFTER SEND
+    supabase.table(
+        "post_queue"
+    ).delete().neq(
+        "id",
+        0
+    ).execute()
 
     await message.answer(
-        f"✅ Broadcast Done\n\n📤 Total Sent: {total_sent}"
+        f"✅ Broadcast Completed\n\n👥 Delivered Users: {delivered_users}"
     )
 
 # =========================
@@ -328,67 +337,77 @@ async def auto_broadcast():
 
     current_time = datetime.now().strftime("%H:%M")
 
-    if current_time != scheduled_time:
-        return
+    print(f"TIME CHECK => {current_time}")
 
-    posts = supabase.table(
-        "post_queue"
-    ).select("*").execute().data
+    if current_time == scheduled_time:
 
-    users = supabase.table(
-        "users"
-    ).select("*").execute().data
+        posts = supabase.table(
+            "post_queue"
+        ).select("*").execute().data
 
-    total_sent = 0
+        users = supabase.table(
+            "users"
+        ).select("*").execute().data
 
-    for post in posts:
+        delivered_users = 0
 
         for user in users:
 
-            try:
+            if user["user_id"] == OWNER_ID:
+                continue
 
-                if post["media_type"] == "photo":
+            success = False
 
-                    await bot.send_photo(
-                        chat_id=user["user_id"],
-                        photo=post["file_id"],
-                        caption=post["caption"]
-                    )
+            for post in posts:
 
-                elif post["media_type"] == "video":
+                try:
 
-                    await bot.send_video(
-                        chat_id=user["user_id"],
-                        video=post["file_id"],
-                        caption=post["caption"]
-                    )
+                    if post["media_type"] == "photo":
 
-                elif post["media_type"] == "document":
+                        await bot.send_photo(
+                            chat_id=user["user_id"],
+                            photo=post["file_id"],
+                            caption=post["caption"]
+                        )
 
-                    await bot.send_document(
-                        chat_id=user["user_id"],
-                        document=post["file_id"],
-                        caption=post["caption"]
-                    )
+                    elif post["media_type"] == "video":
 
-                total_sent += 1
+                        await bot.send_video(
+                            chat_id=user["user_id"],
+                            video=post["file_id"],
+                            caption=post["caption"]
+                        )
 
-            except:
-                pass
+                    elif post["media_type"] == "document":
 
+                        await bot.send_document(
+                            chat_id=user["user_id"],
+                            document=post["file_id"],
+                            caption=post["caption"]
+                        )
+
+                    success = True
+
+                except:
+                    pass
+
+            if success:
+                delivered_users += 1
+
+        # DELETE POSTS AFTER SEND
         supabase.table(
             "post_queue"
-        ).delete().eq(
+        ).delete().neq(
             "id",
-            post["id"]
+            0
         ).execute()
 
-    await bot.send_message(
-        OWNER_ID,
-        f"✅ Scheduled Broadcast Done\n\n📤 Total Sent: {total_sent}"
-    )
+        await bot.send_message(
+            OWNER_ID,
+            f"✅ Scheduled Broadcast Completed\n\n👥 Delivered Users: {delivered_users}"
+        )
 
-    scheduled_time = None
+        scheduled_time = None
 
 # =========================
 # ANONYMOUS CHAT
@@ -517,7 +536,7 @@ async def main():
     scheduler.add_job(
         auto_broadcast,
         "interval",
-        minutes=1
+        seconds=20
     )
 
     scheduler.start()
