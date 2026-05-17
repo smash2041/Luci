@@ -4,7 +4,7 @@ import os
 
 from datetime import datetime
 from threading import Thread
-
+from zoneinfo import ZoneInfo
 from flask import Flask
 from supabase import create_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -241,16 +241,11 @@ async def send_all(message: Message):
         await message.answer("❌ No Saved Posts")
         return
 
-    delivered_users = 0
+    total_sent = 0
 
-    for user in users:
+    for post in posts:
 
-        if user["user_id"] == OWNER_ID:
-            continue
-
-        success = False
-
-        for post in posts:
+        for user in users:
 
             try:
 
@@ -278,24 +273,20 @@ async def send_all(message: Message):
                         caption=post["caption"]
                     )
 
-                success = True
+                total_sent += 1
 
             except:
                 pass
 
-        if success:
-            delivered_users += 1
-
-    # DELETE POSTS AFTER SEND
-    supabase.table(
-        "post_queue"
-    ).delete().neq(
-        "id",
-        0
-    ).execute()
+        supabase.table(
+            "post_queue"
+        ).delete().eq(
+            "id",
+            post["id"]
+        ).execute()
 
     await message.answer(
-        f"✅ Broadcast Completed\n\n👥 Delivered Users: {delivered_users}"
+        f"✅ Broadcast Done\n\n📤 Total Sent: {total_sent}"
     )
 
 # =========================
@@ -335,79 +326,74 @@ async def auto_broadcast():
     if not scheduled_time:
         return
 
-    current_time = datetime.now().strftime("%H:%M")
+    current_time = datetime.now(
+        ZoneInfo("Asia/Kolkata")
+    ).strftime("%H:%M")
 
-    print(f"TIME CHECK => {current_time}")
+    print(f"SCHEDULED => {scheduled_time}")
+    print(f"CURRENT => {current_time}")
 
-    if current_time == scheduled_time:
+    if current_time != scheduled_time:
+        return
 
-        posts = supabase.table(
-            "post_queue"
-        ).select("*").execute().data
+    posts = supabase.table(
+        "post_queue"
+    ).select("*").execute().data
 
-        users = supabase.table(
-            "users"
-        ).select("*").execute().data
+    users = supabase.table(
+        "users"
+    ).select("*").execute().data
 
-        delivered_users = 0
+    total_sent = 0
+
+    for post in posts:
 
         for user in users:
 
-            if user["user_id"] == OWNER_ID:
-                continue
+            try:
 
-            success = False
+                if post["media_type"] == "photo":
 
-            for post in posts:
+                    await bot.send_photo(
+                        chat_id=user["user_id"],
+                        photo=post["file_id"],
+                        caption=post["caption"]
+                    )
 
-                try:
+                elif post["media_type"] == "video":
 
-                    if post["media_type"] == "photo":
+                    await bot.send_video(
+                        chat_id=user["user_id"],
+                        video=post["file_id"],
+                        caption=post["caption"]
+                    )
 
-                        await bot.send_photo(
-                            chat_id=user["user_id"],
-                            photo=post["file_id"],
-                            caption=post["caption"]
-                        )
+                elif post["media_type"] == "document":
 
-                    elif post["media_type"] == "video":
+                    await bot.send_document(
+                        chat_id=user["user_id"],
+                        document=post["file_id"],
+                        caption=post["caption"]
+                    )
 
-                        await bot.send_video(
-                            chat_id=user["user_id"],
-                            video=post["file_id"],
-                            caption=post["caption"]
-                        )
+                total_sent += 1
 
-                    elif post["media_type"] == "document":
+            except:
+                pass
 
-                        await bot.send_document(
-                            chat_id=user["user_id"],
-                            document=post["file_id"],
-                            caption=post["caption"]
-                        )
-
-                    success = True
-
-                except:
-                    pass
-
-            if success:
-                delivered_users += 1
-
-        # DELETE POSTS AFTER SEND
         supabase.table(
             "post_queue"
-        ).delete().neq(
+        ).delete().eq(
             "id",
-            0
+            post["id"]
         ).execute()
 
-        await bot.send_message(
-            OWNER_ID,
-            f"✅ Scheduled Broadcast Completed\n\n👥 Delivered Users: {delivered_users}"
-        )
+    await bot.send_message(
+        OWNER_ID,
+        f"✅ Scheduled Broadcast Done\n\n📤 Total Sent: {total_sent}"
+    )
 
-        scheduled_time = None
+    scheduled_time = None
 
 # =========================
 # ANONYMOUS CHAT
@@ -536,7 +522,7 @@ async def main():
     scheduler.add_job(
         auto_broadcast,
         "interval",
-        seconds=20
+        minutes=1
     )
 
     scheduler.start()
