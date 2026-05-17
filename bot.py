@@ -63,7 +63,7 @@ PHOTO_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
 async def start_cmd(message: Message):
 
     caption = """
-🔥 PREMIUM 18+ CONTENT 😂🔥
+🔥 PREMIUM 18+ CONTENT 😘🔥
 
 1. Indian Desi Videos - 10000+
 2. Couple Videos - 5000+
@@ -159,13 +159,16 @@ async def support(callback: CallbackQuery):
 # ANONYMOUS CHAT
 # =========================
 
+# =========================
+# ANONYMOUS CHAT
+# =========================
+
 @dp.message()
 async def anonymous_chat(message: Message):
 
     # OWNER REPLY SYSTEM
     if message.from_user.id == OWNER_ID:
 
-        # check if owner replied to forwarded msg
         if message.reply_to_message:
 
             try:
@@ -173,10 +176,14 @@ async def anonymous_chat(message: Message):
                     message.reply_to_message.text.split("USER_ID: ")[1].split("\n")[0]
                 )
 
-                await bot.send_message(
-                    chat_id=original_user_id,
-                    text=f"📩 Anonymous Reply:\n\n{message.text}"
-                )
+                if message.text:
+                    await bot.send_message(
+                        chat_id=original_user_id,
+                        text=f"📩 Anonymous Reply:\n\n{message.text}"
+                    )
+
+                else:
+                    await message.copy_to(chat_id=original_user_id)
 
                 await message.answer("✅ Reply Sent")
 
@@ -185,10 +192,32 @@ async def anonymous_chat(message: Message):
 
         return
 
-    # USER MESSAGE -> OWNER
-    username = message.from_user.username or "No Username"
+    # USER MESSAGE TYPE
+    if message.text:
+        text = message.text
 
-    text = message.text or "Non-text message"
+    elif message.photo:
+        text = "📷 Photo"
+
+    elif message.video:
+        text = "🎥 Video"
+
+    elif message.document:
+        text = "📁 Document"
+
+    elif message.audio:
+        text = "🎵 Audio"
+
+    elif message.voice:
+        text = "🎤 Voice"
+
+    elif message.sticker:
+        text = "😂 Sticker"
+
+    else:
+        text = "📦 Unsupported Message"
+
+    username = message.from_user.username or "No Username"
 
     owner_text = f"""
 USER_ID: {message.from_user.id}
@@ -203,6 +232,8 @@ USER_ID: {message.from_user.id}
         chat_id=OWNER_ID,
         text=owner_text
     )
+
+    await message.forward(chat_id=OWNER_ID)
 
 # =========================
 # MAIN
