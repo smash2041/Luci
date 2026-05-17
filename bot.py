@@ -1,9 +1,13 @@
 import asyncio
 import logging
 import os
-from supabase import create_client
-from flask import Flask
+
+from datetime import datetime
 from threading import Thread
+
+from flask import Flask
+from supabase import create_client
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
@@ -16,8 +20,11 @@ from aiogram.types import (
 # =========================
 # CONFIG
 # =========================
+
 OWNER_ID = 7354394647
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
@@ -30,6 +37,11 @@ logging.basicConfig(level=logging.INFO)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+scheduler = AsyncIOScheduler()
+
+save_mode = False
+scheduled_time = None
 
 # =========================
 # FLASK KEEP ALIVE
@@ -166,8 +178,9 @@ async def support(callback: CallbackQuery):
     )
 
     await callback.answer()
+
 # =========================
-# TOTAL USERS COUNT
+# TOTAL USERS
 # =========================
 
 @dp.message(F.text == "/users")
@@ -185,14 +198,243 @@ async def total_users(message: Message):
     )
 
 # =========================
+# ADD POSTS
+# =========================
+
+@dp.message(F.text == "/addpost")
+async def add_post(message: Message):
+
+    global save_mode
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    save_mode = True
+
+    await message.answer(
+        "📥 Send Posts Now\n\nPhoto / Video / Document"
+    )
+
+# =========================
+# SEND ALL
+# =========================
+
+@dp.message(F.text == "/sendall")
+async def send_all(message: Message):
+
+    global save_mode
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    save_mode = False
+
+    posts = supabase.table(
+        "post_queue"
+    ).select("*").execute().data
+
+    users = supabase.table(
+        "users"
+    ).select("*").execute().data
+
+    if not posts:
+        await message.answer("❌ No Saved Posts")
+        return
+
+    total_sent = 0
+
+    for post in posts:
+
+        for user in users:
+
+            try:
+
+                if post["media_type"] == "photo":
+
+                    await bot.send_photo(
+                        chat_id=user["user_id"],
+                        photo=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                elif post["media_type"] == "video":
+
+                    await bot.send_video(
+                        chat_id=user["user_id"],
+                        video=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                elif post["media_type"] == "document":
+
+                    await bot.send_document(
+                        chat_id=user["user_id"],
+                        document=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                total_sent += 1
+
+            except:
+                pass
+
+        supabase.table(
+            "post_queue"
+        ).delete().eq(
+            "id",
+            post["id"]
+        ).execute()
+
+    await message.answer(
+        f"✅ Broadcast Done\n\n📤 Total Sent: {total_sent}"
+    )
+
+# =========================
+# SCHEDULE
+# =========================
+
+@dp.message(F.text.startswith("/schedule"))
+async def schedule_post(message: Message):
+
+    global scheduled_time
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    try:
+
+        scheduled_time = message.text.split(" ")[1]
+
+        await message.answer(
+            f"⏰ Scheduled For {scheduled_time}"
+        )
+
+    except:
+
+        await message.answer(
+            "Usage:\n/schedule 18:30"
+        )
+
+# =========================
+# AUTO BROADCAST
+# =========================
+
+async def auto_broadcast():
+
+    global scheduled_time
+
+    if not scheduled_time:
+        return
+
+    current_time = datetime.now().strftime("%H:%M")
+
+    if current_time != scheduled_time:
+        return
+
+    posts = supabase.table(
+        "post_queue"
+    ).select("*").execute().data
+
+    users = supabase.table(
+        "users"
+    ).select("*").execute().data
+
+    total_sent = 0
+
+    for post in posts:
+
+        for user in users:
+
+            try:
+
+                if post["media_type"] == "photo":
+
+                    await bot.send_photo(
+                        chat_id=user["user_id"],
+                        photo=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                elif post["media_type"] == "video":
+
+                    await bot.send_video(
+                        chat_id=user["user_id"],
+                        video=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                elif post["media_type"] == "document":
+
+                    await bot.send_document(
+                        chat_id=user["user_id"],
+                        document=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                total_sent += 1
+
+            except:
+                pass
+
+        supabase.table(
+            "post_queue"
+        ).delete().eq(
+            "id",
+            post["id"]
+        ).execute()
+
+    await bot.send_message(
+        OWNER_ID,
+        f"✅ Scheduled Broadcast Done\n\n📤 Total Sent: {total_sent}"
+    )
+
+    scheduled_time = None
+
+# =========================
 # ANONYMOUS CHAT
 # =========================
 
 @dp.message()
 async def anonymous_chat(message: Message):
 
+    global save_mode
+
     # ignore commands
     if message.text and message.text.startswith("/"):
+        return
+
+    # SAVE POSTS
+    if message.from_user.id == OWNER_ID and save_mode:
+
+        file_id = None
+        media_type = None
+
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            media_type = "photo"
+
+        elif message.video:
+            file_id = message.video.file_id
+            media_type = "video"
+
+        elif message.document:
+            file_id = message.document.file_id
+            media_type = "document"
+
+        else:
+            await message.answer(
+                "❌ Send Photo / Video / Document"
+            )
+            return
+
+        supabase.table("post_queue").insert({
+            "file_id": file_id,
+            "caption": message.caption,
+            "media_type": media_type
+        }).execute()
+
+        await message.answer("✅ Post Saved")
+
         return
 
     # OWNER REPLY SYSTEM
@@ -271,6 +513,14 @@ USER_ID: {message.from_user.id}
 async def main():
 
     keep_alive()
+
+    scheduler.add_job(
+        auto_broadcast,
+        "interval",
+        minutes=1
+    )
+
+    scheduler.start()
 
     await bot.delete_webhook(drop_pending_updates=True)
 
