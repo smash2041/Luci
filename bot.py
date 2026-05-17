@@ -16,7 +16,7 @@ from aiogram.types import (
 # =========================
 # CONFIG
 # =========================
-
+OWNER_ID = 7354394647
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 logging.basicConfig(level=logging.INFO)
@@ -63,7 +63,7 @@ PHOTO_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
 async def start_cmd(message: Message):
 
     caption = """
-🔥 PREMIUM 18+ CONTENT 😘🔥
+🔥 PREMIUM 18+ CONTENT 😂🔥
 
 1. Indian Desi Videos - 10000+
 2. Couple Videos - 5000+
@@ -155,6 +155,54 @@ async def support(callback: CallbackQuery):
     )
 
     await callback.answer()
+# =========================
+# ANONYMOUS CHAT
+# =========================
+
+@dp.message()
+async def anonymous_chat(message: Message):
+
+    # OWNER REPLY SYSTEM
+    if message.from_user.id == OWNER_ID:
+
+        # check if owner replied to forwarded msg
+        if message.reply_to_message:
+
+            try:
+                original_user_id = int(
+                    message.reply_to_message.text.split("USER_ID: ")[1].split("\n")[0]
+                )
+
+                await bot.send_message(
+                    chat_id=original_user_id,
+                    text=f"📩 Anonymous Reply:\n\n{message.text}"
+                )
+
+                await message.answer("✅ Reply Sent")
+
+            except:
+                pass
+
+        return
+
+    # USER MESSAGE -> OWNER
+    username = message.from_user.username or "No Username"
+
+    text = message.text or "Non-text message"
+
+    owner_text = f"""
+USER_ID: {message.from_user.id}
+
+👤 @{username}
+
+💬 Message:
+{text}
+"""
+
+    await bot.send_message(
+        chat_id=OWNER_ID,
+        text=owner_text
+    )
 
 # =========================
 # MAIN
