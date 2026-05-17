@@ -222,71 +222,75 @@ async def add_post(message: Message):
 @dp.message(F.text == "/sendall")
 async def send_all(message: Message):
 
-    global save_mode
-
     if message.from_user.id != OWNER_ID:
         return
 
-    save_mode = False
-
-    posts = supabase.table(
-        "post_queue"
-    ).select("*").execute().data
-
-    users = supabase.table(
-        "users"
-    ).select("*").execute().data
+    posts = supabase.table("post_queue").select("*").execute().data
+    users = supabase.table("users").select("*").execute().data
 
     if not posts:
-        await message.answer("❌ No Saved Posts")
+        await message.answer("❌ No Posts Found")
         return
 
-    total_sent = 0
+    delivered_users = 0
+    failed_users = 0
 
-    for post in posts:
+    status = await message.answer("📤 Broadcast started...")
 
-        for user in users:
+    for user in users:
+
+        user_id = user["user_id"]
+
+        # ✅ OWNER SKIP (IMPORTANT)
+        if user_id == OWNER_ID:
+            continue
+
+        success_for_user = False
+
+        for post in posts:
 
             try:
 
                 if post["media_type"] == "photo":
-
                     await bot.send_photo(
-                        chat_id=user["user_id"],
+                        chat_id=user_id,
                         photo=post["file_id"],
                         caption=post["caption"]
                     )
 
                 elif post["media_type"] == "video":
-
                     await bot.send_video(
-                        chat_id=user["user_id"],
+                        chat_id=user_id,
                         video=post["file_id"],
                         caption=post["caption"]
                     )
 
                 elif post["media_type"] == "document":
-
                     await bot.send_document(
-                        chat_id=user["user_id"],
+                        chat_id=user_id,
                         document=post["file_id"],
                         caption=post["caption"]
                     )
 
-                total_sent += 1
+                success_for_user = True
+
+                await asyncio.sleep(0.05)
 
             except:
                 pass
 
-        supabase.table(
-            "post_queue"
-        ).delete().eq(
-            "id",
-            post["id"]
-        ).execute()
+        if success_for_user:
+            delivered_users += 1
+        else:
+            failed_users += 1
 
-    await message.answer(
-        f"✅ Broadcast Done\n\n📤 Total Sent: {total_sent}"
+    # clean posts
+    supabase.table("post_queue").delete().neq("id", 0).execute()
+
+    await status.edit_text(
+        f"✅ Broadcast Done\n\n"
+        f"👥 Delivered Users: {delivered_users}\n"
+        f"❌ Failed Users: {failed_users}"
     )
 
 # =========================
@@ -336,61 +340,70 @@ async def auto_broadcast():
     if current_time != scheduled_time:
         return
 
-    posts = supabase.table(
-        "post_queue"
-    ).select("*").execute().data
+    posts = supabase.table("post_queue").select("*").execute().data
+    users = supabase.table("users").select("*").execute().data
 
-    users = supabase.table(
-        "users"
-    ).select("*").execute().data
+    if not posts or not users:
+        return
 
-    total_sent = 0
+    delivered_users = 0
+    failed_users = 0
 
-    for post in posts:
+    for user in users:
 
-        for user in users:
+        user_id = user["user_id"]
+
+        # ✅ OWNER SKIP
+        if user_id == OWNER_ID:
+            continue
+
+        success_for_user = False
+
+        for post in posts:
 
             try:
 
                 if post["media_type"] == "photo":
-
                     await bot.send_photo(
-                        chat_id=user["user_id"],
+                        chat_id=user_id,
                         photo=post["file_id"],
                         caption=post["caption"]
                     )
 
                 elif post["media_type"] == "video":
-
                     await bot.send_video(
-                        chat_id=user["user_id"],
+                        chat_id=user_id,
                         video=post["file_id"],
                         caption=post["caption"]
                     )
 
                 elif post["media_type"] == "document":
-
                     await bot.send_document(
-                        chat_id=user["user_id"],
+                        chat_id=user_id,
                         document=post["file_id"],
                         caption=post["caption"]
                     )
 
-                total_sent += 1
+                success_for_user = True
+
+                await asyncio.sleep(0.05)
 
             except:
                 pass
 
-        supabase.table(
-            "post_queue"
-        ).delete().eq(
-            "id",
-            post["id"]
-        ).execute()
+        if success_for_user:
+            delivered_users += 1
+        else:
+            failed_users += 1
+
+    # clean posts after successful broadcast
+    supabase.table("post_queue").delete().neq("id", 0).execute()
 
     await bot.send_message(
         OWNER_ID,
-        f"✅ Scheduled Broadcast Done\n\n📤 Total Sent: {total_sent}"
+        f"⏰ Scheduled Broadcast Done\n\n"
+        f"👥 Delivered Users: {delivered_users}\n"
+        f"❌ Failed Users: {failed_users}"
     )
 
     scheduled_time = None
