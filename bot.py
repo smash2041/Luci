@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-
+from supabase import create_client
 from flask import Flask
 from threading import Thread
 
@@ -18,6 +18,13 @@ from aiogram.types import (
 # =========================
 OWNER_ID = 7354394647
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase = create_client(
+    SUPABASE_URL,
+    SUPABASE_KEY
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -61,6 +68,10 @@ PHOTO_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
 
 @dp.message(F.text == "/start")
 async def start_cmd(message: Message):
+
+    supabase.table("users").upsert({
+        "user_id": message.from_user.id
+    }).execute()
 
     caption = """
 🔥 PREMIUM 18+ CONTENT 😘🔥
