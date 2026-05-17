@@ -246,6 +246,19 @@ USER_ID: {message.from_user.id}
 
     await message.forward(chat_id=OWNER_ID)
 
+@dp.message(F.text == "/users")
+async def total_users(message: Message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    data = supabase.table("users").select("*").execute()
+
+    total = len(data.data)
+
+    await message.answer(
+        f"👥 Total Users: {total}"
+    )
 # =========================
 # MAIN
 # =========================
