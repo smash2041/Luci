@@ -177,6 +177,10 @@ async def support(callback: CallbackQuery):
 @dp.message()
 async def anonymous_chat(message: Message):
 
+    # ignore commands
+    if message.text and message.text.startswith("/"):
+        return
+
     # OWNER REPLY SYSTEM
     if message.from_user.id == OWNER_ID:
 
