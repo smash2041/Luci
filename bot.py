@@ -235,12 +235,16 @@ async def total_users(message: Message):
 @dp.message(F.text == "/resetdemo")
 async def reset_demo(message: Message):
 
+    global demo_mode
+
     if message.from_user.id != OWNER_ID:
         return
 
+    demo_mode = False   # 🔥 THIS IS THE MISSING PART
+
     supabase.table("demo_posts").delete().neq("id", 0).execute()
 
-    await message.answer("🗑 Old demo deleted\nNow use /adddemo to add new demo")
+    await message.answer("🗑 Demo cleared + Demo mode OFF")
 
 @dp.message(F.text == "/adddemo")
 async def add_demo(message: Message):
