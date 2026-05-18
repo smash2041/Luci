@@ -49,9 +49,10 @@ scheduler = AsyncIOScheduler(
 # =========================
 
 BOT_STATE = {
-    "mode": "normal",   # normal / demo / save
+    "mode": "normal",
     "scheduled_time": None,
-    "broadcast_running": False
+    "broadcast_running": False,
+    "demo_category": "demo1"
 }
 
 broadcast_lock = asyncio.Lock()
@@ -91,6 +92,23 @@ def keep_alive():
 
 PHOTO_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
 
+QR_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
+
+# =========================
+# BUY BUTTON
+# =========================
+
+BUY_KEYBOARD = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="BUY PREMIUM 💎",
+                callback_data="buy_premium"
+            )
+        ]
+    ]
+)
+
 # =========================
 # START COMMAND
 # =========================
@@ -111,7 +129,7 @@ async def start_cmd(message: Message):
     caption = """
 🔥 PREMIUM 18+ CONTENT 😘🔥
 
-1. Indian Desi 📌Videos - 10000+
+1. Indian Desi 🤣Videos - 10000+
 2. Couple Videos - 5000+
 3. Amateur Videos - 3000+
 4. HD Collection - 7000+
@@ -127,24 +145,29 @@ Instant Access Available For You 🌚
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
+
             [
                 InlineKeyboardButton(
-                    text="UNLOCK 💎",
-                    callback_data="unlock"
-                ),
-
-                InlineKeyboardButton(
-                    text="DEMO 😋",
-                    callback_data="demo"
+                    text="DEMO 1 🔥",
+                    callback_data="demo1"
                 )
             ],
 
             [
                 InlineKeyboardButton(
-                    text="PROOF 😊",
-                    callback_data="proof"
-                ),
+                    text="DEMO 2 😋",
+                    callback_data="demo2"
+                )
+            ],
 
+            [
+                InlineKeyboardButton(
+                    text="DEMO 3 💋",
+                    callback_data="demo3"
+                )
+            ],
+
+            [
                 InlineKeyboardButton(
                     text="SUPPORT ❤️",
                     callback_data="support"
@@ -160,34 +183,26 @@ Instant Access Available For You 🌚
     )
 
 # =========================
-# BUTTONS
+# DEMO FUNCTION
 # =========================
 
-@dp.callback_query(F.data == "unlock")
-async def unlock(callback: CallbackQuery):
-
-    await callback.message.answer(
-        "💎 Payment system later add kar sakte ho."
-    )
-
-    await callback.answer()
-
-@dp.callback_query(F.data == "demo")
-async def demo(callback: CallbackQuery):
+async def send_demo_posts(user_id, category):
 
     try:
 
         posts = supabase.table(
             "demo_posts"
-        ).select("*").limit(5).execute().data
+        ).select("*").eq(
+            "category",
+            category
+        ).limit(6).execute().data
 
         if not posts:
 
-            await callback.message.answer(
+            await bot.send_message(
+                user_id,
                 "❌ No demo posts available"
             )
-
-            await callback.answer()
 
             return
 
@@ -198,7 +213,7 @@ async def demo(callback: CallbackQuery):
                 if post["media_type"] == "photo":
 
                     await bot.send_photo(
-                        chat_id=callback.from_user.id,
+                        chat_id=user_id,
                         photo=post["file_id"],
                         caption=post["caption"]
                     )
@@ -206,7 +221,7 @@ async def demo(callback: CallbackQuery):
                 elif post["media_type"] == "video":
 
                     await bot.send_video(
-                        chat_id=callback.from_user.id,
+                        chat_id=user_id,
                         video=post["file_id"],
                         caption=post["caption"]
                     )
@@ -214,7 +229,7 @@ async def demo(callback: CallbackQuery):
                 elif post["media_type"] == "document":
 
                     await bot.send_document(
-                        chat_id=callback.from_user.id,
+                        chat_id=user_id,
                         document=post["file_id"],
                         caption=post["caption"]
                     )
@@ -225,22 +240,80 @@ async def demo(callback: CallbackQuery):
 
                 print(f"DEMO SEND ERROR: {e}")
 
-        await callback.answer(
-            "📤 Demo sent"
+        await bot.send_message(
+            user_id,
+            "🔥 Want Full Premium Access?",
+            reply_markup=BUY_KEYBOARD
         )
 
     except Exception as e:
 
         print(f"DEMO ERROR: {e}")
 
-@dp.callback_query(F.data == "proof")
-async def proof(callback: CallbackQuery):
+# =========================
+# DEMO BUTTONS
+# =========================
 
-    await callback.message.answer(
-        "😊 Proofs later yaha add karo."
+@dp.callback_query(F.data == "demo1")
+async def demo1(callback: CallbackQuery):
+
+    await send_demo_posts(
+        callback.from_user.id,
+        "demo1"
     )
 
     await callback.answer()
+
+@dp.callback_query(F.data == "demo2")
+async def demo2(callback: CallbackQuery):
+
+    await send_demo_posts(
+        callback.from_user.id,
+        "demo2"
+    )
+
+    await callback.answer()
+
+@dp.callback_query(F.data == "demo3")
+async def demo3(callback: CallbackQuery):
+
+    await send_demo_posts(
+        callback.from_user.id,
+        "demo3"
+    )
+
+    await callback.answer()
+
+# =========================
+# BUY PREMIUM
+# =========================
+
+@dp.callback_query(F.data == "buy_premium")
+async def buy_premium(callback: CallbackQuery):
+
+    caption = """
+🔥 PREMIUM ACCESS 🔥
+
+✅ Full Premium Videos
+✅ Lifetime Access
+✅ Instant Delivery
+✅ 50000+ Collection
+
+💰 PRICE = ₹57
+
+📲 Scan QR & Pay
+"""
+
+    await callback.message.answer_photo(
+        photo=QR_URL,
+        caption=caption
+    )
+
+    await callback.answer()
+
+# =========================
+# SUPPORT
+# =========================
 
 @dp.callback_query(F.data == "support")
 async def support(callback: CallbackQuery):
@@ -317,20 +390,51 @@ async def reset_demo(message: Message):
         )
 
 # =========================
-# MODE COMMANDS
+# DEMO CATEGORY COMMANDS
 # =========================
 
-@dp.message(F.text == "/adddemo")
-async def add_demo(message: Message):
+@dp.message(F.text == "/demo1")
+async def set_demo1(message: Message):
 
     if message.from_user.id != OWNER_ID:
         return
 
     BOT_STATE["mode"] = "demo"
+    BOT_STATE["demo_category"] = "demo1"
 
     await message.answer(
-        "📥 Demo mode ON\nAb demo posts bhejo"
+        "✅ Uploading for DEMO1"
     )
+
+@dp.message(F.text == "/demo2")
+async def set_demo2(message: Message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    BOT_STATE["mode"] = "demo"
+    BOT_STATE["demo_category"] = "demo2"
+
+    await message.answer(
+        "✅ Uploading for DEMO2"
+    )
+
+@dp.message(F.text == "/demo3")
+async def set_demo3(message: Message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    BOT_STATE["mode"] = "demo"
+    BOT_STATE["demo_category"] = "demo3"
+
+    await message.answer(
+        "✅ Uploading for DEMO3"
+    )
+
+# =========================
+# MODE COMMANDS
+# =========================
 
 @dp.message(F.text == "/addpost")
 async def add_post(message: Message):
@@ -448,16 +552,13 @@ async def send_all(message: Message):
 
                     except Exception as e:
 
-                        print(
-                            f"BROADCAST ERROR: {e}"
-                        )
+                        print(f"BROADCAST ERROR: {e}")
 
                 if success_for_user:
                     delivered_users += 1
                 else:
                     failed_users += 1
 
-            # SAFE CLEANUP
             for post in posts:
 
                 try:
@@ -471,9 +572,7 @@ async def send_all(message: Message):
 
                 except Exception as e:
 
-                    print(
-                        f"DELETE ERROR: {e}"
-                    )
+                    print(f"DELETE ERROR: {e}")
 
             BOT_STATE["mode"] = "normal"
 
@@ -563,7 +662,6 @@ async def auto_broadcast():
                 + sch_min
             )
 
-            # 1 minute tolerance
             if abs(current_minutes - scheduled_minutes) > 1:
                 return
 
@@ -627,16 +725,13 @@ async def auto_broadcast():
 
                     except Exception as e:
 
-                        print(
-                            f"SCHEDULE ERROR: {e}"
-                        )
+                        print(f"SCHEDULE ERROR: {e}")
 
                 if success_for_user:
                     delivered_users += 1
                 else:
                     failed_users += 1
 
-            # SAFE CLEANUP
             for post in posts:
 
                 try:
@@ -650,9 +745,7 @@ async def auto_broadcast():
 
                 except Exception as e:
 
-                    print(
-                        f"DELETE ERROR: {e}"
-                    )
+                    print(f"DELETE ERROR: {e}")
 
             BOT_STATE["mode"] = "normal"
 
@@ -793,7 +886,7 @@ async def anonymous_chat(message: Message):
         return
 
     # =========================
-    # OWNER SAVE DEMO
+    # OWNER SAVE DEMO POSTS
     # =========================
 
     if (
@@ -835,12 +928,13 @@ async def anonymous_chat(message: Message):
 
                 "file_id": file_id,
                 "media_type": media_type,
-                "caption": message.caption or ""
+                "caption": message.caption or "",
+                "category": BOT_STATE["demo_category"]
 
             }).execute()
 
             await message.answer(
-                "✅ Demo Saved"
+                f"✅ Demo Saved In {BOT_STATE['demo_category']}"
             )
 
         except Exception as e:
