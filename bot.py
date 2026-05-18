@@ -17,6 +17,7 @@ from aiogram.types import (
     CallbackQuery
 )
 
+demo_mode = False
 # =========================
 # CONFIG
 # =========================
@@ -153,11 +154,42 @@ async def unlock(callback: CallbackQuery):
 @dp.callback_query(F.data == "demo")
 async def demo(callback: CallbackQuery):
 
-    await callback.message.answer(
-        "😋 Demo links/videos later yaha add karo."
-    )
+    posts = supabase.table("demo_posts").select("*").limit(5).execute().data
 
-    await callback.answer()
+    if not posts:
+        await callback.message.answer("❌ No demo posts available")
+        await callback.answer()
+        return
+
+    for post in posts:
+
+        try:
+
+            if post["media_type"] == "photo":
+                await bot.send_photo(
+                    chat_id=callback.from_user.id,
+                    photo=post["file_id"],
+                    caption=post["caption"]
+                )
+
+            elif post["media_type"] == "video":
+                await bot.send_video(
+                    chat_id=callback.from_user.id,
+                    video=post["file_id"],
+                    caption=post["caption"]
+                )
+
+            elif post["media_type"] == "document":
+                await bot.send_document(
+                    chat_id=callback.from_user.id,
+                    document=post["file_id"],
+                    caption=post["caption"]
+                )
+
+        except:
+            pass
+
+    await callback.answer("📤 Demo sent")
 
 
 @dp.callback_query(F.data == "proof")
@@ -198,8 +230,31 @@ async def total_users(message: Message):
     )
 
 # =========================
-# ADD POSTS
+# COMMANDS
 # =========================
+@dp.message(F.text == "/resetdemo")
+async def reset_demo(message: Message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    supabase.table("demo_posts").delete().neq("id", 0).execute()
+
+    await message.answer("🗑 Old demo deleted\nNow use /adddemo to add new demo")
+
+@dp.message(F.text == "/adddemo")
+async def add_demo(message: Message):
+
+    global demo_mode
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    demo_mode = True
+
+    await message.answer(
+        "📥 Demo mode ON\n\nAb photo/video/document bhejo, wo Supabase me save ho jayega."
+    )
 
 @dp.message(F.text == "/addpost")
 async def add_post(message: Message):
@@ -415,13 +470,15 @@ async def auto_broadcast():
 @dp.message()
 async def anonymous_chat(message: Message):
 
-    global save_mode
+    global save_mode, demo_mode
 
     # ignore commands
     if message.text and message.text.startswith("/"):
         return
 
-    # SAVE POSTS
+    # =========================
+    # SAVE POSTS (BROADCAST)
+    # =========================
     if message.from_user.id == OWNER_ID and save_mode:
 
         file_id = None
@@ -440,14 +497,12 @@ async def anonymous_chat(message: Message):
             media_type = "document"
 
         else:
-            await message.answer(
-                "❌ Send Photo / Video / Document"
-            )
+            await message.answer("❌ Send Photo / Video / Document")
             return
 
         supabase.table("post_queue").insert({
             "file_id": file_id,
-            "caption": message.caption,
+            "caption": message.caption or "",
             "media_type": media_type
         }).execute()
 
@@ -455,7 +510,43 @@ async def anonymous_chat(message: Message):
 
         return
 
+    # =========================
+    # SAVE DEMO POSTS (FIXED)
+    # =========================
+    if message.from_user.id == OWNER_ID and demo_mode:
+
+        file_id = None
+        media_type = None
+
+        if message.photo:
+            file_id = message.photo[-1].file_id
+            media_type = "photo"
+
+        elif message.video:
+            file_id = message.video.file_id
+            media_type = "video"
+
+        elif message.document:
+            file_id = message.document.file_id
+            media_type = "document"
+
+        else:
+            await message.answer("❌ Send Photo / Video / Document")
+            return
+
+        supabase.table("demo_posts").insert({
+            "file_id": file_id,
+            "media_type": media_type,
+            "caption": message.caption or ""
+        }).execute()
+
+        await message.answer("✅ Demo Saved")
+
+        return
+
+    # =========================
     # OWNER REPLY SYSTEM
+    # =========================
     if message.from_user.id == OWNER_ID:
 
         if message.reply_to_message:
@@ -481,7 +572,9 @@ async def anonymous_chat(message: Message):
 
         return
 
+    # =========================
     # USER MESSAGE TYPE
+    # =========================
     if message.text:
         text = message.text
 
@@ -523,7 +616,6 @@ USER_ID: {message.from_user.id}
     )
 
     await message.forward(chat_id=OWNER_ID)
-
 # =========================
 # MAIN
 # =========================
