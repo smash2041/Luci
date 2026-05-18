@@ -212,9 +212,37 @@ async def support(callback: CallbackQuery):
     await callback.answer()
 
 # =========================
+
+    # OWNER REPLY SYSTEM
+    # =========================
+    if message.from_user.id == OWNER_ID:
+
+        if message.reply_to_message:
+
+            try:
+                original_user_id = int(
+                    message.reply_to_message.text.split("USER_ID: ")[1].split("\n")[0]
+                )
+
+                if message.text:
+                    await bot.send_message(
+                        chat_id=original_user_id,
+                        text=f"📩 Anonymous Reply:\n\n{message.text}"
+                    )
+
+                else:
+                    await message.copy_to(chat_id=original_user_id)
+
+                await message.answer("✅ Reply Sent")
+
+            except:
+                pass
+
+        return
+
+# =========================
 # TOTAL USERS
 # =========================
-
 @dp.message(F.text == "/users")
 async def total_users(message: Message):
 
@@ -550,34 +578,7 @@ async def anonymous_chat(message: Message):
 
         return
 
-    # =========================
-    # OWNER REPLY SYSTEM
-    # =========================
-    if message.from_user.id == OWNER_ID:
-
-        if message.reply_to_message:
-
-            try:
-                original_user_id = int(
-                    message.reply_to_message.text.split("USER_ID: ")[1].split("\n")[0]
-                )
-
-                if message.text:
-                    await bot.send_message(
-                        chat_id=original_user_id,
-                        text=f"📩 Anonymous Reply:\n\n{message.text}"
-                    )
-
-                else:
-                    await message.copy_to(chat_id=original_user_id)
-
-                await message.answer("✅ Reply Sent")
-
-            except:
-                pass
-
-        return
-
+    
     # =========================
     # USER MESSAGE TYPE
     # =========================
