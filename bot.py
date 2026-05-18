@@ -111,7 +111,7 @@ async def start_cmd(message: Message):
     caption = """
 🔥 PREMIUM 18+ CONTENT 😘🔥
 
-1. Indian Desi 🤣Videos - 10000+
+1. Indian Desi 📌Videos - 10000+
 2. Couple Videos - 5000+
 3. Amateur Videos - 3000+
 4. HD Collection - 7000+
@@ -677,6 +677,63 @@ async def auto_broadcast():
 async def anonymous_chat(message: Message):
 
     # =========================
+    # OWNER REPLY SYSTEM
+    # =========================
+
+    if (
+        message.from_user.id == OWNER_ID
+        and message.reply_to_message
+    ):
+
+        text = (
+            message.reply_to_message.text
+            or ""
+        )
+
+        if "USER_ID:" not in text:
+
+            await message.answer(
+                "❌ Invalid Reply"
+            )
+
+            return
+
+        try:
+
+            user_id = int(
+                text.split("USER_ID:")[1]
+                .split("\n")[0]
+                .strip()
+            )
+
+            if message.text:
+
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=f"📩 Admin Reply:\n\n{message.text}"
+                )
+
+            else:
+
+                await bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id
+                )
+
+            await message.answer(
+                "✅ Sent to user"
+            )
+
+        except Exception as e:
+
+            await message.answer(
+                f"❌ Failed: {e}"
+            )
+
+        return
+
+    # =========================
     # OWNER SAVE BROADCAST POST
     # =========================
 
@@ -790,63 +847,6 @@ async def anonymous_chat(message: Message):
 
             await message.answer(
                 f"❌ Error: {e}"
-            )
-
-        return
-
-    # =========================
-    # OWNER REPLY SYSTEM
-    # =========================
-
-    if message.from_user.id == OWNER_ID:
-
-        if not message.reply_to_message:
-            return
-
-        text = (
-            message.reply_to_message.text
-            or ""
-        )
-
-        if "USER_ID:" not in text:
-
-            await message.answer(
-                "❌ Invalid Reply"
-            )
-
-            return
-
-        try:
-
-            user_id = int(
-                text.split("USER_ID:")[1]
-                .split("\n")[0]
-                .strip()
-            )
-
-            if message.text:
-
-                await bot.send_message(
-                    chat_id=user_id,
-                    text=f"📩 Admin Reply:\n\n{message.text}"
-                )
-
-            else:
-
-                await bot.copy_message(
-                    chat_id=user_id,
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id
-                )
-
-            await message.answer(
-                "✅ Sent to user"
-            )
-
-        except Exception as e:
-
-            await message.answer(
-                f"❌ Failed: {e}"
             )
 
         return
