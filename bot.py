@@ -249,29 +249,31 @@ async def reset_demo(message: Message):
 @dp.message(F.text == "/adddemo")
 async def add_demo(message: Message):
 
-    global demo_mode
+    global demo_mode, save_mode
 
     if message.from_user.id != OWNER_ID:
         return
 
     demo_mode = True
+    save_mode = False   # 🔥 IMPORTANT
 
     await message.answer(
-        "📥 Demo mode ON\n\nAb photo/video/document bhejo, wo Supabase me save ho jayega."
+        "📥 Demo mode ON\nAb demo posts bhejo"
     )
 
 @dp.message(F.text == "/addpost")
 async def add_post(message: Message):
 
-    global save_mode
+    global save_mode, demo_mode
 
     if message.from_user.id != OWNER_ID:
         return
 
     save_mode = True
+    demo_mode = False   # 🔥 IMPORTANT
 
     await message.answer(
-        "📥 Send Posts Now\n\nPhoto / Video / Document"
+        "📥 Broadcast mode ON\nAb posts bhejo"
     )
 
 # =========================
