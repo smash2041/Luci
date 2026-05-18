@@ -383,9 +383,21 @@ async def send_all(message: Message):
     )
 
 # =========================
-# SCHEDULE
-# =========================
 
+@dp.message(F.text == "/normal")
+async def normal_mode(message: Message):
+
+    global save_mode, demo_mode
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    save_mode = False
+    demo_mode = False
+
+    await message.answer("✅ Bot is now in NORMAL MODE")
+# SCHEDULE
+# =========================    
 @dp.message(F.text.startswith("/schedule"))
 async def schedule_post(message: Message):
 
