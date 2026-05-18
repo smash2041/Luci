@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from threading import Thread
 from zoneinfo import ZoneInfo
+
 from flask import Flask
 from supabase import create_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,7 +18,6 @@ from aiogram.types import (
     CallbackQuery
 )
 
-demo_mode = False
 # =========================
 # CONFIG
 # =========================
@@ -29,20 +29,32 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
+logging.basicConfig(level=logging.INFO)
+
 supabase = create_client(
     SUPABASE_URL,
     SUPABASE_KEY
 )
 
-logging.basicConfig(level=logging.INFO)
-
 bot = Bot(token=BOT_TOKEN)
+
 dp = Dispatcher()
 
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(
+    timezone="Asia/Kolkata"
+)
 
-save_mode = False
-scheduled_time = None
+# =========================
+# CENTRAL BOT STATE
+# =========================
+
+BOT_STATE = {
+    "mode": "normal",   # normal / demo / save
+    "scheduled_time": None,
+    "broadcast_running": False
+}
+
+broadcast_lock = asyncio.Lock()
 
 # =========================
 # FLASK KEEP ALIVE
@@ -57,6 +69,7 @@ def home():
 PORT = int(os.environ.get("PORT", 10000))
 
 def run_web():
+
     app.run(
         host="0.0.0.0",
         port=PORT,
@@ -65,8 +78,11 @@ def run_web():
     )
 
 def keep_alive():
+
     t = Thread(target=run_web)
+
     t.daemon = True
+
     t.start()
 
 # =========================
@@ -82,14 +98,20 @@ PHOTO_URL = "https://i.ibb.co/5XkMbSLp/x.jpg"
 @dp.message(F.text == "/start")
 async def start_cmd(message: Message):
 
-    supabase.table("users").upsert({
-        "user_id": message.from_user.id
-    }).execute()
+    try:
+
+        supabase.table("users").upsert({
+            "user_id": message.from_user.id
+        }).execute()
+
+    except Exception as e:
+
+        print(f"USER SAVE ERROR: {e}")
 
     caption = """
 🔥 PREMIUM 18+ CONTENT 😘🔥
 
-1. Indian Desi Videos - 10000+
+1. Indian Desi 🤣Videos - 10000+
 2. Couple Videos - 5000+
 3. Amateur Videos - 3000+
 4. HD Collection - 7000+
@@ -150,47 +172,66 @@ async def unlock(callback: CallbackQuery):
 
     await callback.answer()
 
-
 @dp.callback_query(F.data == "demo")
 async def demo(callback: CallbackQuery):
 
-    posts = supabase.table("demo_posts").select("*").limit(5).execute().data
+    try:
 
-    if not posts:
-        await callback.message.answer("❌ No demo posts available")
-        await callback.answer()
-        return
+        posts = supabase.table(
+            "demo_posts"
+        ).select("*").limit(5).execute().data
 
-    for post in posts:
+        if not posts:
 
-        try:
+            await callback.message.answer(
+                "❌ No demo posts available"
+            )
 
-            if post["media_type"] == "photo":
-                await bot.send_photo(
-                    chat_id=callback.from_user.id,
-                    photo=post["file_id"],
-                    caption=post["caption"]
-                )
+            await callback.answer()
 
-            elif post["media_type"] == "video":
-                await bot.send_video(
-                    chat_id=callback.from_user.id,
-                    video=post["file_id"],
-                    caption=post["caption"]
-                )
+            return
 
-            elif post["media_type"] == "document":
-                await bot.send_document(
-                    chat_id=callback.from_user.id,
-                    document=post["file_id"],
-                    caption=post["caption"]
-                )
+        for post in posts:
 
-        except:
-            pass
+            try:
 
-    await callback.answer("📤 Demo sent")
+                if post["media_type"] == "photo":
 
+                    await bot.send_photo(
+                        chat_id=callback.from_user.id,
+                        photo=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                elif post["media_type"] == "video":
+
+                    await bot.send_video(
+                        chat_id=callback.from_user.id,
+                        video=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                elif post["media_type"] == "document":
+
+                    await bot.send_document(
+                        chat_id=callback.from_user.id,
+                        document=post["file_id"],
+                        caption=post["caption"]
+                    )
+
+                await asyncio.sleep(0.12)
+
+            except Exception as e:
+
+                print(f"DEMO SEND ERROR: {e}")
+
+        await callback.answer(
+            "📤 Demo sent"
+        )
+
+    except Exception as e:
+
+        print(f"DEMO ERROR: {e}")
 
 @dp.callback_query(F.data == "proof")
 async def proof(callback: CallbackQuery):
@@ -200,7 +241,6 @@ async def proof(callback: CallbackQuery):
     )
 
     await callback.answer()
-
 
 @dp.callback_query(F.data == "support")
 async def support(callback: CallbackQuery):
@@ -212,78 +252,81 @@ async def support(callback: CallbackQuery):
     await callback.answer()
 
 # =========================
-
-    # OWNER REPLY SYSTEM
-    # =========================
-    if message.from_user.id == OWNER_ID:
-
-        if message.reply_to_message:
-
-            try:
-                original_user_id = int(
-                    message.reply_to_message.text.split("USER_ID: ")[1].split("\n")[0]
-                )
-
-                if message.text:
-                    await bot.send_message(
-                        chat_id=original_user_id,
-                        text=f"📩 Anonymous Reply:\n\n{message.text}"
-                    )
-
-                else:
-                    await message.copy_to(chat_id=original_user_id)
-
-                await message.answer("✅ Reply Sent")
-
-            except:
-                pass
-
-        return
-
-# =========================
 # TOTAL USERS
 # =========================
+
 @dp.message(F.text == "/users")
 async def total_users(message: Message):
 
     if message.from_user.id != OWNER_ID:
         return
 
-    data = supabase.table("users").select("*").execute()
+    try:
 
-    total = len(data.data)
+        data = supabase.table(
+            "users"
+        ).select("*").execute()
 
-    await message.answer(
-        f"👥 Total Users: {total}"
-    )
+        total = len(data.data)
+
+        await message.answer(
+            f"👥 Total Users: {total}"
+        )
+
+    except Exception as e:
+
+        await message.answer(
+            f"❌ Error: {e}"
+        )
 
 # =========================
-# COMMANDS
+# RESET DEMO
 # =========================
+
 @dp.message(F.text == "/resetdemo")
 async def reset_demo(message: Message):
-
-    global demo_mode
 
     if message.from_user.id != OWNER_ID:
         return
 
-    demo_mode = False   # 🔥 THIS IS THE MISSING PART
+    try:
 
-    supabase.table("demo_posts").delete().neq("id", 0).execute()
+        posts = supabase.table(
+            "demo_posts"
+        ).select("*").execute().data
 
-    await message.answer("🗑 Demo cleared + Demo mode OFF")
+        for post in posts:
+
+            supabase.table(
+                "demo_posts"
+            ).delete().eq(
+                "id",
+                post["id"]
+            ).execute()
+
+        BOT_STATE["mode"] = "normal"
+
+        await message.answer(
+            "🗑 Demo cleared + Demo mode OFF"
+        )
+
+    except Exception as e:
+
+        await message.answer(
+            f"❌ Error: {e}"
+        )
+
+# =========================
+# MODE COMMANDS
+# =========================
 
 @dp.message(F.text == "/adddemo")
 async def add_demo(message: Message):
 
-    global demo_mode, save_mode
-
     if message.from_user.id != OWNER_ID:
         return
 
-    demo_mode = True
-    save_mode = False   # 🔥 IMPORTANT
+    BOT_STATE["mode"] = "demo"
 
     await message.answer(
         "📥 Demo mode ON\nAb demo posts bhejo"
@@ -292,16 +335,27 @@ async def add_demo(message: Message):
 @dp.message(F.text == "/addpost")
 async def add_post(message: Message):
 
-    global save_mode, demo_mode
+    if message.from_user.id != OWNER_ID:
+        return
+
+    BOT_STATE["mode"] = "save"
+
+    await message.answer(
+        "📥 Broadcast mode ON\nAb posts bhejo"
+    )
+
+@dp.message(F.text == "/normal")
+async def normal(message: Message):
 
     if message.from_user.id != OWNER_ID:
         return
 
-    save_mode = True
-    demo_mode = False   # 🔥 IMPORTANT
+    BOT_STATE["mode"] = "normal"
+
+    BOT_STATE["scheduled_time"] = None
 
     await message.answer(
-        "📥 Broadcast mode ON\nAb posts bhejo"
+        "✅ Fully Normal Mode ON"
     )
 
 # =========================
@@ -314,104 +368,154 @@ async def send_all(message: Message):
     if message.from_user.id != OWNER_ID:
         return
 
-    posts = supabase.table("post_queue").select("*").execute().data
-    users = supabase.table("users").select("*").execute().data
+    async with broadcast_lock:
 
-    if not posts:
-        await message.answer("❌ No Posts Found")
-        return
+        if BOT_STATE["broadcast_running"]:
 
-    delivered_users = 0
-    failed_users = 0
+            await message.answer(
+                "⚠️ Broadcast already running"
+            )
 
-    status = await message.answer("📤 Broadcast started...")
+            return
 
-    for user in users:
+        BOT_STATE["broadcast_running"] = True
 
-        user_id = user["user_id"]
+        try:
 
-        # ✅ OWNER SKIP (IMPORTANT)
-        if user_id == OWNER_ID:
-            continue
+            posts = supabase.table(
+                "post_queue"
+            ).select("*").execute().data
 
-        success_for_user = False
+            users = supabase.table(
+                "users"
+            ).select("*").execute().data
 
-        for post in posts:
+            if not posts:
 
-            try:
+                await message.answer(
+                    "❌ No Posts Found"
+                )
 
-                if post["media_type"] == "photo":
-                    await bot.send_photo(
-                        chat_id=user_id,
-                        photo=post["file_id"],
-                        caption=post["caption"]
+                return
+
+            delivered_users = 0
+            failed_users = 0
+
+            status = await message.answer(
+                "📤 Broadcast started..."
+            )
+
+            for user in users:
+
+                user_id = user["user_id"]
+
+                if user_id == OWNER_ID:
+                    continue
+
+                success_for_user = False
+
+                for post in posts:
+
+                    try:
+
+                        if post["media_type"] == "photo":
+
+                            await bot.send_photo(
+                                chat_id=user_id,
+                                photo=post["file_id"],
+                                caption=post["caption"]
+                            )
+
+                        elif post["media_type"] == "video":
+
+                            await bot.send_video(
+                                chat_id=user_id,
+                                video=post["file_id"],
+                                caption=post["caption"]
+                            )
+
+                        elif post["media_type"] == "document":
+
+                            await bot.send_document(
+                                chat_id=user_id,
+                                document=post["file_id"],
+                                caption=post["caption"]
+                            )
+
+                        success_for_user = True
+
+                        await asyncio.sleep(0.12)
+
+                    except Exception as e:
+
+                        print(
+                            f"BROADCAST ERROR: {e}"
+                        )
+
+                if success_for_user:
+                    delivered_users += 1
+                else:
+                    failed_users += 1
+
+            # SAFE CLEANUP
+            for post in posts:
+
+                try:
+
+                    supabase.table(
+                        "post_queue"
+                    ).delete().eq(
+                        "id",
+                        post["id"]
+                    ).execute()
+
+                except Exception as e:
+
+                    print(
+                        f"DELETE ERROR: {e}"
                     )
 
-                elif post["media_type"] == "video":
-                    await bot.send_video(
-                        chat_id=user_id,
-                        video=post["file_id"],
-                        caption=post["caption"]
-                    )
+            BOT_STATE["mode"] = "normal"
 
-                elif post["media_type"] == "document":
-                    await bot.send_document(
-                        chat_id=user_id,
-                        document=post["file_id"],
-                        caption=post["caption"]
-                    )
+            await status.edit_text(
+                f"✅ Broadcast Done\n\n"
+                f"👥 Delivered Users: {delivered_users}\n"
+                f"❌ Failed Users: {failed_users}"
+            )
 
-                success_for_user = True
+        finally:
 
-                await asyncio.sleep(0.05)
-
-            except:
-                pass
-
-        if success_for_user:
-            delivered_users += 1
-        else:
-            failed_users += 1
-
-    # clean posts
-    supabase.table("post_queue").delete().neq("id", 0).execute()
-
-    await status.edit_text(
-        f"✅ Broadcast Done\n\n"
-        f"👥 Delivered Users: {delivered_users}\n"
-        f"❌ Failed Users: {failed_users}"
-    )
+            BOT_STATE["broadcast_running"] = False
 
 # =========================
-
-@dp.message(F.text == "/normal")
-async def normal_mode(message: Message):
-
-    global save_mode, demo_mode
-
-    if message.from_user.id != OWNER_ID:
-        return
-
-    save_mode = False
-    demo_mode = False
-
-    await message.answer("✅ Bot is now in NORMAL MODE")
 # SCHEDULE
-# =========================    
+# =========================
+
 @dp.message(F.text.startswith("/schedule"))
 async def schedule_post(message: Message):
-
-    global scheduled_time
 
     if message.from_user.id != OWNER_ID:
         return
 
     try:
 
-        scheduled_time = message.text.split(" ")[1]
+        scheduled = message.text.split(" ")[1]
+
+        hour, minute = map(
+            int,
+            scheduled.split(":")
+        )
+
+        if hour < 0 or hour > 23:
+            raise Exception()
+
+        if minute < 0 or minute > 59:
+            raise Exception()
+
+        BOT_STATE["scheduled_time"] = scheduled
 
         await message.answer(
-            f"⏰ Scheduled For {scheduled_time}"
+            f"⏰ Scheduled For {scheduled}"
         )
 
     except:
@@ -426,199 +530,367 @@ async def schedule_post(message: Message):
 
 async def auto_broadcast():
 
-    global scheduled_time
+    async with broadcast_lock:
 
-    if not scheduled_time:
-        return
+        if BOT_STATE["broadcast_running"]:
+            return
 
-    current_time = datetime.now(
-        ZoneInfo("Asia/Kolkata")
-    ).strftime("%H:%M")
+        BOT_STATE["broadcast_running"] = True
 
-    print(f"SCHEDULED => {scheduled_time}")
-    print(f"CURRENT => {current_time}")
+        try:
 
-    if current_time != scheduled_time:
-        return
+            scheduled = BOT_STATE["scheduled_time"]
 
-    posts = supabase.table("post_queue").select("*").execute().data
-    users = supabase.table("users").select("*").execute().data
+            if not scheduled:
+                return
 
-    if not posts or not users:
-        return
+            current_dt = datetime.now(
+                ZoneInfo("Asia/Kolkata")
+            )
 
-    delivered_users = 0
-    failed_users = 0
+            current_minutes = (
+                current_dt.hour * 60
+                + current_dt.minute
+            )
 
-    for user in users:
+            sch_hour, sch_min = map(
+                int,
+                scheduled.split(":")
+            )
 
-        user_id = user["user_id"]
+            scheduled_minutes = (
+                sch_hour * 60
+                + sch_min
+            )
 
-        # ✅ OWNER SKIP
-        if user_id == OWNER_ID:
-            continue
+            # 1 minute tolerance
+            if abs(current_minutes - scheduled_minutes) > 1:
+                return
 
-        success_for_user = False
+            posts = supabase.table(
+                "post_queue"
+            ).select("*").execute().data
 
-        for post in posts:
+            users = supabase.table(
+                "users"
+            ).select("*").execute().data
 
-            try:
+            if not posts:
 
-                if post["media_type"] == "photo":
-                    await bot.send_photo(
-                        chat_id=user_id,
-                        photo=post["file_id"],
-                        caption=post["caption"]
+                BOT_STATE["scheduled_time"] = None
+
+                return
+
+            delivered_users = 0
+            failed_users = 0
+
+            for user in users:
+
+                user_id = user["user_id"]
+
+                if user_id == OWNER_ID:
+                    continue
+
+                success_for_user = False
+
+                for post in posts:
+
+                    try:
+
+                        if post["media_type"] == "photo":
+
+                            await bot.send_photo(
+                                chat_id=user_id,
+                                photo=post["file_id"],
+                                caption=post["caption"]
+                            )
+
+                        elif post["media_type"] == "video":
+
+                            await bot.send_video(
+                                chat_id=user_id,
+                                video=post["file_id"],
+                                caption=post["caption"]
+                            )
+
+                        elif post["media_type"] == "document":
+
+                            await bot.send_document(
+                                chat_id=user_id,
+                                document=post["file_id"],
+                                caption=post["caption"]
+                            )
+
+                        success_for_user = True
+
+                        await asyncio.sleep(0.12)
+
+                    except Exception as e:
+
+                        print(
+                            f"SCHEDULE ERROR: {e}"
+                        )
+
+                if success_for_user:
+                    delivered_users += 1
+                else:
+                    failed_users += 1
+
+            # SAFE CLEANUP
+            for post in posts:
+
+                try:
+
+                    supabase.table(
+                        "post_queue"
+                    ).delete().eq(
+                        "id",
+                        post["id"]
+                    ).execute()
+
+                except Exception as e:
+
+                    print(
+                        f"DELETE ERROR: {e}"
                     )
 
-                elif post["media_type"] == "video":
-                    await bot.send_video(
-                        chat_id=user_id,
-                        video=post["file_id"],
-                        caption=post["caption"]
-                    )
+            BOT_STATE["mode"] = "normal"
 
-                elif post["media_type"] == "document":
-                    await bot.send_document(
-                        chat_id=user_id,
-                        document=post["file_id"],
-                        caption=post["caption"]
-                    )
+            BOT_STATE["scheduled_time"] = None
 
-                success_for_user = True
+            await bot.send_message(
+                OWNER_ID,
+                f"⏰ Scheduled Broadcast Done\n\n"
+                f"👥 Delivered Users: {delivered_users}\n"
+                f"❌ Failed Users: {failed_users}"
+            )
 
-                await asyncio.sleep(0.05)
+        finally:
 
-            except:
-                pass
-
-        if success_for_user:
-            delivered_users += 1
-        else:
-            failed_users += 1
-
-    # clean posts after successful broadcast
-    supabase.table("post_queue").delete().neq("id", 0).execute()
-
-    await bot.send_message(
-        OWNER_ID,
-        f"⏰ Scheduled Broadcast Done\n\n"
-        f"👥 Delivered Users: {delivered_users}\n"
-        f"❌ Failed Users: {failed_users}"
-    )
-
-    scheduled_time = None
+            BOT_STATE["broadcast_running"] = False
 
 # =========================
-# ANONYMOUS CHAT
+# MAIN CHAT HANDLER
 # =========================
 
-@dp.message()
+@dp.message(~F.text.startswith("/"))
 async def anonymous_chat(message: Message):
 
-    global save_mode, demo_mode
-
-    # ignore commands
-    if message.text and message.text.startswith("/"):
-        return
-
     # =========================
-    # SAVE POSTS (BROADCAST)
+    # OWNER SAVE BROADCAST POST
     # =========================
-    if message.from_user.id == OWNER_ID and save_mode:
+
+    if (
+        message.from_user.id == OWNER_ID
+        and BOT_STATE["mode"] == "save"
+    ):
 
         file_id = None
         media_type = None
 
         if message.photo:
+
             file_id = message.photo[-1].file_id
             media_type = "photo"
 
         elif message.video:
+
             file_id = message.video.file_id
             media_type = "video"
 
         elif message.document:
+
             file_id = message.document.file_id
             media_type = "document"
 
         else:
-            await message.answer("❌ Send Photo / Video / Document")
+
+            await message.answer(
+                "❌ Send Photo / Video / Document"
+            )
+
             return
 
-        supabase.table("post_queue").insert({
-            "file_id": file_id,
-            "caption": message.caption or "",
-            "media_type": media_type
-        }).execute()
+        try:
 
-        await message.answer("✅ Post Saved")
+            supabase.table(
+                "post_queue"
+            ).insert({
+
+                "file_id": file_id,
+                "caption": message.caption or "",
+                "media_type": media_type
+
+            }).execute()
+
+            await message.answer(
+                "✅ Post Saved"
+            )
+
+        except Exception as e:
+
+            await message.answer(
+                f"❌ Error: {e}"
+            )
 
         return
 
     # =========================
-    # SAVE DEMO POSTS (FIXED)
+    # OWNER SAVE DEMO
     # =========================
-    if message.from_user.id == OWNER_ID and demo_mode:
+
+    if (
+        message.from_user.id == OWNER_ID
+        and BOT_STATE["mode"] == "demo"
+    ):
 
         file_id = None
         media_type = None
 
         if message.photo:
+
             file_id = message.photo[-1].file_id
             media_type = "photo"
 
         elif message.video:
+
             file_id = message.video.file_id
             media_type = "video"
 
         elif message.document:
+
             file_id = message.document.file_id
             media_type = "document"
 
         else:
-            await message.answer("❌ Send Photo / Video / Document")
+
+            await message.answer(
+                "❌ Send Photo / Video / Document"
+            )
+
             return
 
-        supabase.table("demo_posts").insert({
-            "file_id": file_id,
-            "media_type": media_type,
-            "caption": message.caption or ""
-        }).execute()
+        try:
 
-        await message.answer("✅ Demo Saved")
+            supabase.table(
+                "demo_posts"
+            ).insert({
+
+                "file_id": file_id,
+                "media_type": media_type,
+                "caption": message.caption or ""
+
+            }).execute()
+
+            await message.answer(
+                "✅ Demo Saved"
+            )
+
+        except Exception as e:
+
+            await message.answer(
+                f"❌ Error: {e}"
+            )
 
         return
 
-    
+    # =========================
+    # OWNER REPLY SYSTEM
+    # =========================
+
+    if message.from_user.id == OWNER_ID:
+
+        if not message.reply_to_message:
+            return
+
+        text = (
+            message.reply_to_message.text
+            or ""
+        )
+
+        if "USER_ID:" not in text:
+
+            await message.answer(
+                "❌ Invalid Reply"
+            )
+
+            return
+
+        try:
+
+            user_id = int(
+                text.split("USER_ID:")[1]
+                .split("\n")[0]
+                .strip()
+            )
+
+            if message.text:
+
+                await bot.send_message(
+                    chat_id=user_id,
+                    text=f"📩 Admin Reply:\n\n{message.text}"
+                )
+
+            else:
+
+                await bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id
+                )
+
+            await message.answer(
+                "✅ Sent to user"
+            )
+
+        except Exception as e:
+
+            await message.answer(
+                f"❌ Failed: {e}"
+            )
+
+        return
+
     # =========================
     # USER MESSAGE TYPE
     # =========================
+
     if message.text:
+
         text = message.text
 
     elif message.photo:
+
         text = "📷 Photo"
 
     elif message.video:
+
         text = "🎥 Video"
 
     elif message.document:
+
         text = "📁 Document"
 
     elif message.audio:
+
         text = "🎵 Audio"
 
     elif message.voice:
+
         text = "🎤 Voice"
 
     elif message.sticker:
+
         text = "😂 Sticker"
 
     else:
+
         text = "📦 Unsupported Message"
 
-    username = message.from_user.username or "No Username"
+    username = (
+        message.from_user.username
+        or "No Username"
+    )
 
     owner_text = f"""
 USER_ID: {message.from_user.id}
@@ -629,12 +901,23 @@ USER_ID: {message.from_user.id}
 {text}
 """
 
-    await bot.send_message(
-        chat_id=OWNER_ID,
-        text=owner_text
-    )
+    try:
 
-    await message.forward(chat_id=OWNER_ID)
+        await bot.send_message(
+            chat_id=OWNER_ID,
+            text=owner_text
+        )
+
+        await bot.copy_message(
+            chat_id=OWNER_ID,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id
+        )
+
+    except Exception as e:
+
+        print(f"FORWARD ERROR: {e}")
+
 # =========================
 # MAIN
 # =========================
@@ -646,16 +929,19 @@ async def main():
     scheduler.add_job(
         auto_broadcast,
         "interval",
-        minutes=1
+        seconds=30
     )
 
     scheduler.start()
 
-    await bot.delete_webhook(drop_pending_updates=True)
+    await bot.delete_webhook(
+        drop_pending_updates=True
+    )
 
     print("Bot Started")
 
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
+
     asyncio.run(main())
